@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modifier un loyer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body { background: #f0f4f8; }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+        .card-header {
+            background: linear-gradient(135deg, #1a3c6e, #2980b9);
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            font-weight: bold;
+            padding: 15px 20px;
+        }
+        .form-control, .form-select { border-radius: 10px; }
+        .btn { border-radius: 10px; }
+    </style>
+</head>
+<body class="container mt-4">
+
+    <div class="card">
+        <div class="card-header">✏️ Modifier un loyer</div>
+        <div class="card-body">
+            <form action="/modifier/{{ loyer[0] }}" method="POST">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">🏠 Bien</label>
+                    <input type="text" name="bien" class="form-control" value="{{ loyer[1] }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">👤 Locataire</label>
+                    <input type="text" name="locataire" class="form-control" value="{{ loyer[2] }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">💵 Montant (FCFA)</label>
+                    <input type="number" name="montant" class="form-control" value="{{ loyer[3] }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📅 Date</label>
+                    <input type="date" name="date" class="form-control" value="{{ loyer[4] }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">📊 Statut</label>
+                    <select name="statut" class="form-control">
+                        <option value="Payé" {% if loyer[5] == 'Payé' %}selected{% endif %}>✅ Payé</option>
+                        <option value="En retard" {% if loyer[5] == 'En retard' %}selected{% endif %}>⏳ En retard</option>
+                        <option value="Impayé" {% if loyer[5] == 'Impayé' %}selected{% endif %}>❌ Impayé</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">💬 Commentaire</label>
+                    <textarea name="commentaire" class="form-control" rows="2"
+                        placeholder="Raison du retard ou impayé...">{{ loyer[6] if loyer[6] else '' }}</textarea>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-success w-100">💾 Sauvegarder</button>
+                    <a href="/" class="btn btn-secondary w-100">Annuler</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</body>
+</html>
