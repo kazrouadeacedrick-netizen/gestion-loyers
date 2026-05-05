@@ -247,6 +247,116 @@ def export_pdf():
     filename = f"loyers_{mois if mois else 'complet'}.pdf"
     return Response(buffer, mimetype='application/pdf',
                     headers={'Content-Disposition': f'attachment;filename={filename}'})
+@app.route('/recu/<int:id>')
+@login_required
+def generer_recu(id):
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute('SELECT * FROM loyers WHERE id = ?', (id,))
+    loyer = c.fetchone()
+    conn.close()
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            rightMargin=40, leftMargin=40,
+                            topMargin=40, bottomMargin=40)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # En-tête avec logo
+    logo_path = os.path.join('static', 'logo.png')
+    if os.path.exists(logo_path):
+        logo = RLImage(logo_path, width=150, height=75)
+        elements.append(logo)
+    elements.append(Spacer(1, 10))
+
+    # Titre
+    titre_style = styles['Title']
+    elements.append(Paragraph("REÇU DE PAIEMENT", titre_style))
+    elements.append(Spacer(1, 5))
+
+    # Numéro de reçu et date
+    elements.append(Paragraph(f"N° Reçu : LBR-{id:04d}", styles['Normal']))
+    elements.append(Paragraph(f"Date d'émission : {datetime.now().strftime('%d/%m/%Y')}", styles['Normal']))
+    elements.append(Spacer(1, 20))
+
+    # Ligne séparatrice
+    from reportlab.platypus import HRFlowable
+    elements.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#1a3c6e')))
+    elements.append(Spacer(1, 15))
+
+    # Informations du paiement
+    data = [
+        ['Bien', loyer[1]],
+        ['Locataire', loyer[2]],
+        ['Montant payé', f"{loyer[3]:,.0f} FCFA"],
+        ['Date de paiement', format_date(loyer[4])],
+        ['Statut', loyer[5]],
+    ]
+
+    table = Table(data, colWidths=[150, 300])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#1a3c6e')),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.white),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('PADDING', (0, 0), (-1, -1), 10),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (1, 0), (1, -1), [colors.whitesmoke, colors.white]),
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 30))
+
+    # Ligne séparatrice
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.grey))
+    elements.append(Spacer(1, 20))
+
+    # Signature et cachet
+    sig_data = [['Signature du gestionnaire', 'Cachet de l\'entreprise']]
+    sig_table = Table(sig_data, colWidths=[230, 230])
+    sig_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('PADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(sig_table)
+    elements.append(Spacer(1, 10))
+
+    # Image signature + emplacement cachet
+    sig_path = os.path.join('static', 'signature.png')
+    cachet_data = [['', '']]
+
+    if os.path.exists(sig_path):
+        sig_img = RLImage(sig_path, width=120, height=60)
+        cachet_data = [[sig_img, 'Emplacement\ndu cachet']]
+    
+    content_table = Table(cachet_data, colWidths=[230, 230])
+    content_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('TEXTCOLOR', (1, 0), (1, 0), colors.grey),
+        ('BOX', (1, 0), (1, 0), 1, colors.grey),
+        ('PADDING', (0, 0), (-1, -1), 15),
+    ]))
+    elements.append(content_table)
+    elements.append(Spacer(1, 20))
+
+    # Pied de page
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#1a3c6e')))
+    elements.append(Spacer(1, 8))
+    elements.append(Paragraph(
+        "Le Labelle Résidence — Votre confort, notre engagement",
+        styles['Normal']
+    ))
+
+    doc.build(elements)
+    buffer.seek(0)
+    filename = f"recu_LBR{id:04d}_{loyer[2].replace(' ', '_')}.pdf"
+    return Response(buffer, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment;filename={filename}'})
 
 if __name__ == '__main__':
     init_db()

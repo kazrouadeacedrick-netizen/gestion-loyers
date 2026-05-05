@@ -238,7 +238,10 @@
                                 </td>
                                 <td><small><em>{{ loyer[6] if loyer[6] else '—' }}</em></small></td>
                                 <td>
-                                    <a href="/modifier/{{ loyer[0] }}" class="btn btn-sm btn-warning">✏️</a>
+                                    {% if loyer[5] == 'Payé' %}
+<a href="/recu/{{ loyer[0] }}" class="btn btn-sm btn-success">🧾</a>
+{% endif %}
+<a href="/modifier/{{ loyer[0] }}" class="btn btn-sm btn-warning">✏️</a>
                                     <a href="/supprimer/{{ loyer[0] }}"
                                        class="btn btn-sm btn-danger"
                                        onclick="return confirm('Supprimer ce loyer ?')">🗑️</a>
