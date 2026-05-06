@@ -1,20 +1,20 @@
 from flask import Flask, render_template, request, redirect, Response, session
-import sqlite3
+import psycopg2
+import os
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import io
-import os
 
 app = Flask(__name__)
 app.secret_key = 'gestion_loyers_secret_2026'
 
 USERS = {
-    'Kazroua': generate_password_hash('immo2026'),
-    'Mme Anita Corine epse Assemian': generate_password_hash('immo2026')
+    'Kazroua': generate_password_hash('cedric1610'),
+    'Mme Assemian': generate_password_hash('immo2026')
 }
 
 def format_date(value):
@@ -27,11 +27,15 @@ def format_date(value):
 def formatdate(value):
     return format_date(value)
 
+def get_db():
+    conn = psycopg2.connect(os.environ.get('DATABASE_URL'))
+    return conn
+
 def init_db():
-    conn = sqlite3.connect('database.db')
+    conn = get_db()
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS loyers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         bien TEXT NOT NULL,
         locataire TEXT NOT NULL,
         montant REAL NOT NULL,
@@ -39,10 +43,6 @@ def init_db():
         statut TEXT NOT NULL,
         commentaire TEXT
     )''')
-    try:
-        c.execute('ALTER TABLE loyers ADD COLUMN commentaire TEXT')
-    except:
-        pass
     conn.commit()
     conn.close()
 
@@ -77,10 +77,10 @@ def logout():
 @login_required
 def index():
     mois = request.args.get('mois', '')
-    conn = sqlite3.connect('database.db')
+    conn = get_db()
     c = conn.cursor()
     if mois:
-        c.execute('SELECT * FROM loyers WHERE date LIKE ? ORDER BY date DESC', (f'{mois}%',))
+        c.execute("SELECT * FROM loyers WHERE date LIKE %s ORDER BY date DESC", (f'{mois}%',))
     else:
         c.execute('SELECT * FROM loyers ORDER BY date DESC')
     loyers = c.fetchall()
@@ -88,14 +88,14 @@ def index():
     if mois:
         c.execute('''SELECT bien, locataire, SUM(montant), COUNT(*), MAX(commentaire)
                      FROM loyers
-                     WHERE statut IN ("Impayé", "En retard")
-                     AND date LIKE ?
-                     GROUP BY bien, locataire''', (f'{mois}%',))
+                     WHERE statut IN (%s, %s)
+                     AND date LIKE %s
+                     GROUP BY bien, locataire''', ('Impayé', 'En retard', f'{mois}%'))
     else:
         c.execute('''SELECT bien, locataire, SUM(montant), COUNT(*), MAX(commentaire)
                      FROM loyers
-                     WHERE statut IN ("Impayé", "En retard")
-                     GROUP BY bien, locataire''')
+                     WHERE statut IN (%s, %s)
+                     GROUP BY bien, locataire''', ('Impayé', 'En retard'))
     arrieres = c.fetchall()
     conn.close()
     return render_template('index.html', loyers=loyers,
@@ -111,9 +111,9 @@ def ajouter():
     date = request.form['date']
     statut = request.form['statut']
     commentaire = request.form.get('commentaire', '')
-    conn = sqlite3.connect('database.db')
+    conn = get_db()
     c = conn.cursor()
-    c.execute('INSERT INTO loyers (bien, locataire, montant, date, statut, commentaire) VALUES (?, ?, ?, ?, ?, ?)',
+    c.execute('INSERT INTO loyers (bien, locataire, montant, date, statut, commentaire) VALUES (%s, %s, %s, %s, %s, %s)',
               (bien, locataire, montant, date, statut, commentaire))
     conn.commit()
     conn.close()
@@ -122,9 +122,9 @@ def ajouter():
 @app.route('/modifier/<int:id>')
 @login_required
 def modifier(id):
-    conn = sqlite3.connect('database.db')
+    conn = get_db()
     c = conn.cursor()
-    c.execute('SELECT * FROM loyers WHERE id = ?', (id,))
+    c.execute('SELECT * FROM loyers WHERE id = %s', (id,))
     loyer = c.fetchone()
     conn.close()
     return render_template('modifier.html', loyer=loyer)
@@ -138,10 +138,10 @@ def modifier_post(id):
     date = request.form['date']
     statut = request.form['statut']
     commentaire = request.form.get('commentaire', '')
-    conn = sqlite3.connect('database.db')
+    conn = get_db()
     c = conn.cursor()
-    c.execute('''UPDATE loyers SET bien=?, locataire=?, montant=?, date=?, statut=?, commentaire=?
-                 WHERE id=?''', (bien, locataire, montant, date, statut, commentaire, id))
+    c.execute('''UPDATE loyers SET bien=%s, locataire=%s, montant=%s, date=%s, statut=%s, commentaire=%s
+                 WHERE id=%s''', (bien, locataire, montant, date, statut, commentaire, id))
     conn.commit()
     conn.close()
     return redirect('/')
@@ -149,110 +149,19 @@ def modifier_post(id):
 @app.route('/supprimer/<int:id>')
 @login_required
 def supprimer(id):
-    conn = sqlite3.connect('database.db')
+    conn = get_db()
     c = conn.cursor()
-    c.execute('DELETE FROM loyers WHERE id = ?', (id,))
+    c.execute('DELETE FROM loyers WHERE id = %s', (id,))
     conn.commit()
     conn.close()
     return redirect('/')
 
-@app.route('/export-pdf')
-@login_required
-def export_pdf():
-    mois = request.args.get('mois', '')
-    conn = sqlite3.connect('database.db')
-    c = conn.cursor()
-    if mois:
-        c.execute('SELECT * FROM loyers WHERE date LIKE ? ORDER BY date DESC', (f'{mois}%',))
-    else:
-        c.execute('SELECT * FROM loyers ORDER BY date DESC')
-    loyers = c.fetchall()
-    total = sum(l[3] for l in loyers if l[5] == 'Payé')
-    if mois:
-        c.execute('''SELECT bien, locataire, SUM(montant), COUNT(*), MAX(commentaire)
-                     FROM loyers
-                     WHERE statut IN ("Impayé", "En retard")
-                     AND date LIKE ?
-                     GROUP BY bien, locataire''', (f'{mois}%',))
-    else:
-        c.execute('''SELECT bien, locataire, SUM(montant), COUNT(*), MAX(commentaire)
-                     FROM loyers
-                     WHERE statut IN ("Impayé", "En retard")
-                     GROUP BY bien, locataire''')
-    arrieres = c.fetchall()
-    conn.close()
-
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4,
-                            rightMargin=30, leftMargin=30,
-                            topMargin=40, bottomMargin=30)
-    styles = getSampleStyleSheet()
-    elements = []
-
-    logo_path = os.path.join('static', 'logo.png')
-    if os.path.exists(logo_path):
-        logo = RLImage(logo_path, width=120, height=60)
-        elements.append(logo)
-
-    titre = "Rapport de Gestion des Loyers"
-    if mois:
-        titre += f" — {mois}"
-    elements.append(Paragraph(titre, styles['Title']))
-    elements.append(Paragraph(f"Généré par : {session['user']}", styles['Normal']))
-    elements.append(Spacer(1, 12))
-    elements.append(Paragraph(f"Total encaissé : {total} FCFA", styles['Heading2']))
-    elements.append(Spacer(1, 12))
-
-    elements.append(Paragraph("Détail des loyers", styles['Heading2']))
-    data = [['Bien', 'Locataire', 'Montant (FCFA)', 'Date', 'Statut', 'Commentaire']]
-    for l in loyers:
-        commentaire = l[6] if len(l) > 6 and l[6] else '-'
-        date_formatee = format_date(l[4])
-        data.append([l[1], l[2], f"{l[3]}", date_formatee, l[5], commentaire])
-
-    table = Table(data, colWidths=[90, 100, 85, 70, 65, 90])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a3c6e')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
-    ]))
-    elements.append(table)
-    elements.append(Spacer(1, 20))
-
-    if arrieres:
-        elements.append(Paragraph("Arriérés de paiement", styles['Heading2']))
-        data2 = [['Bien', 'Locataire', 'Total dû (FCFA)', 'Nb mois', 'Commentaire']]
-        for a in arrieres:
-            commentaire = a[4] if a[4] else '-'
-            data2.append([a[0], a[1], f"{a[2]}", f"{a[3]}", commentaire])
-
-        table2 = Table(data2, colWidths=[100, 120, 100, 70, 110])
-        table2.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#c0392b')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.mistyrose, colors.white]),
-        ]))
-        elements.append(table2)
-
-    doc.build(elements)
-    buffer.seek(0)
-    filename = f"loyers_{mois if mois else 'complet'}.pdf"
-    return Response(buffer, mimetype='application/pdf',
-                    headers={'Content-Disposition': f'attachment;filename={filename}'})
 @app.route('/recu/<int:id>')
 @login_required
 def generer_recu(id):
-    conn = sqlite3.connect('database.db')
+    conn = get_db()
     c = conn.cursor()
-    c.execute('SELECT * FROM loyers WHERE id = ?', (id,))
+    c.execute('SELECT * FROM loyers WHERE id = %s', (id,))
     loyer = c.fetchone()
     conn.close()
 
@@ -263,29 +172,21 @@ def generer_recu(id):
     styles = getSampleStyleSheet()
     elements = []
 
-    # En-tête avec logo
     logo_path = os.path.join('static', 'logo.png')
     if os.path.exists(logo_path):
         logo = RLImage(logo_path, width=150, height=75)
         elements.append(logo)
     elements.append(Spacer(1, 10))
 
-    # Titre
-    titre_style = styles['Title']
-    elements.append(Paragraph("REÇU DE PAIEMENT", titre_style))
+    elements.append(Paragraph("REÇU DE PAIEMENT", styles['Title']))
     elements.append(Spacer(1, 5))
-
-    # Numéro de reçu et date
     elements.append(Paragraph(f"N° Reçu : LBR-{id:04d}", styles['Normal']))
     elements.append(Paragraph(f"Date d'émission : {datetime.now().strftime('%d/%m/%Y')}", styles['Normal']))
     elements.append(Spacer(1, 20))
 
-    # Ligne séparatrice
-    from reportlab.platypus import HRFlowable
     elements.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#1a3c6e')))
     elements.append(Spacer(1, 15))
 
-    # Informations du paiement
     data = [
         ['Bien', loyer[1]],
         ['Locataire', loyer[2]],
@@ -308,12 +209,10 @@ def generer_recu(id):
     elements.append(table)
     elements.append(Spacer(1, 30))
 
-    # Ligne séparatrice
     elements.append(HRFlowable(width="100%", thickness=1, color=colors.grey))
     elements.append(Spacer(1, 20))
 
-    # Signature et cachet
-    sig_data = [['Signature du gestionnaire', 'Cachet de l\'entreprise']]
+    sig_data = [['Signature du gestionnaire', "Cachet de l'entreprise"]]
     sig_table = Table(sig_data, colWidths=[230, 230])
     sig_table.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
@@ -324,14 +223,13 @@ def generer_recu(id):
     elements.append(sig_table)
     elements.append(Spacer(1, 10))
 
-    # Image signature + emplacement cachet
     sig_path = os.path.join('static', 'signature.png')
-    cachet_data = [['', '']]
-
     if os.path.exists(sig_path):
         sig_img = RLImage(sig_path, width=120, height=60)
         cachet_data = [[sig_img, 'Emplacement\ndu cachet']]
-    
+    else:
+        cachet_data = [['', 'Emplacement\ndu cachet']]
+
     content_table = Table(cachet_data, colWidths=[230, 230])
     content_table.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -344,7 +242,6 @@ def generer_recu(id):
     elements.append(content_table)
     elements.append(Spacer(1, 20))
 
-    # Pied de page
     elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#1a3c6e')))
     elements.append(Spacer(1, 8))
     elements.append(Paragraph(
@@ -358,6 +255,13 @@ def generer_recu(id):
     return Response(buffer, mimetype='application/pdf',
                     headers={'Content-Disposition': f'attachment;filename={filename}'})
 
-if __name__ == '__main__':
-    init_db()
-    app.run(debug=True)
+@app.route('/export-pdf')
+@login_required
+def export_pdf():
+    mois = request.args.get('mois', '')
+    conn = get_db()
+    c = conn.cursor()
+    if mois:
+        c.execute("SELECT * FROM loyers WHERE date LIKE %s ORDER BY date DESC", (f'{mois}%',))
+    else:
+        c.execute('SELECT * FROM loyers ORDER BY date DESC')
