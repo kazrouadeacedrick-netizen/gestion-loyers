@@ -13,8 +13,8 @@ app = Flask(__name__)
 app.secret_key = 'gestion_loyers_secret_2026'
 
 USERS = {
-    'Kazroua': generate_password_hash('cedric1610'),
-    'Mme Assemian': generate_password_hash('immo2026')
+    'Kazroua': generate_password_hash('immo2026'),
+    'Mme Anita Corine epse Assemian': generate_password_hash('immo2026')
 }
 
 def format_date(value):
@@ -265,3 +265,91 @@ def export_pdf():
         c.execute("SELECT * FROM loyers WHERE date LIKE %s ORDER BY date DESC", (f'{mois}%',))
     else:
         c.execute('SELECT * FROM loyers ORDER BY date DESC')
+    loyers = c.fetchall()
+    total = sum(l[3] for l in loyers if l[5] == 'Payé')
+    if mois:
+        c.execute('''SELECT bien, locataire, SUM(montant), COUNT(*), MAX(commentaire)
+                     FROM loyers WHERE statut IN (%s, %s)
+                     AND date LIKE %s
+                     GROUP BY bien, locataire''', ('Impayé', 'En retard', f'{mois}%'))
+    else:
+        c.execute('''SELECT bien, locataire, SUM(montant), COUNT(*), MAX(commentaire)
+                     FROM loyers WHERE statut IN (%s, %s)
+                     GROUP BY bien, locataire''', ('Impayé', 'En retard'))
+    arrieres = c.fetchall()
+    conn.close()
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            rightMargin=30, leftMargin=30,
+                            topMargin=40, bottomMargin=30)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    logo_path = os.path.join('static', 'logo.png')
+    if os.path.exists(logo_path):
+        logo = RLImage(logo_path, width=120, height=60)
+        elements.append(logo)
+
+    titre = "Rapport de Gestion des Loyers"
+    if mois:
+        titre += f" — {mois}"
+    elements.append(Paragraph(titre, styles['Title']))
+    elements.append(Paragraph(f"Généré par : {session['user']}", styles['Normal']))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(f"Total encaissé : {total} FCFA", styles['Heading2']))
+    elements.append(Spacer(1, 12))
+
+    elements.append(Paragraph("Détail des loyers", styles['Heading2']))
+    data = [['Bien', 'Locataire', 'Montant (FCFA)', 'Date', 'Statut', 'Commentaire']]
+    for l in loyers:
+        commentaire = l[6] if len(l) > 6 and l[6] else '-'
+        date_formatee = format_date(l[4])
+        data.append([l[1], l[2], f"{l[3]}", date_formatee, l[5], commentaire])
+
+    table = Table(data, colWidths=[90, 100, 85, 70, 65, 90])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a3c6e')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 20))
+
+    if arrieres:
+        elements.append(Paragraph("Arriérés de paiement", styles['Heading2']))
+        data2 = [['Bien', 'Locataire', 'Total dû (FCFA)', 'Nb mois', 'Commentaire']]
+        for a in arrieres:
+            commentaire = a[4] if a[4] else '-'
+            data2.append([a[0], a[1], f"{a[2]}", f"{a[3]}", commentaire])
+
+        table2 = Table(data2, colWidths=[100, 120, 100, 70, 110])
+        table2.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#c0392b')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.mistyrose, colors.white]),
+        ]))
+        elements.append(table2)
+
+    doc.build(elements)
+    buffer.seek(0)
+    filename = f"loyers_{mois if mois else 'complet'}.pdf"
+    return Response(buffer, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment;filename={filename}'})
+
+@app.route('/manifest.json')
+def manifest():
+    from flask import send_from_directory
+    return send_from_directory('static', 'manifest.json')
+
+if __name__ == '__main__':
+    init_db()
+    app.run(debug=True)
