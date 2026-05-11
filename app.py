@@ -28,7 +28,10 @@ def formatdate(value):
     return format_date(value)
 
 def get_db():
-    conn = psycopg2.connect(os.environ.get('DATABASE_URL'))
+    url = os.environ.get('DATABASE_URL', '')
+    if url.startswith('postgres://'):
+        url = url.replace('postgres://', 'postgresql://', 1)
+    conn = psycopg2.connect(url, sslmode='require')
     return conn
 
 def init_db():
