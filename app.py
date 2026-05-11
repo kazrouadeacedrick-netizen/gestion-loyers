@@ -14,8 +14,9 @@ app.secret_key = 'gestion_loyers_secret_2026'
 
 USERS = {
     'Kazroua': generate_password_hash('cedric'),
-    'Mme Assemian': generate_password_hash('immo2026')
+    'Mme Assemian': generate_password_hash('niman')
 }
+
 
 def format_date(value):
     try:
