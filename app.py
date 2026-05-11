@@ -353,6 +353,8 @@ def manifest():
     from flask import send_from_directory
     return send_from_directory('static', 'manifest.json')
 
-if __name__ == '__main__':
+with app.app_context():
     init_db()
+
+if __name__ == '__main__':
     app.run(debug=True)
