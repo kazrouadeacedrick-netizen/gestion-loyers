@@ -13,8 +13,8 @@ app = Flask(__name__)
 app.secret_key = 'gestion_loyers_secret_2026'
 
 USERS = {
-    'Kazroua': generate_password_hash('immo2026'),
-    'Mme Anita Corine epse Assemian': generate_password_hash('immo2026')
+    'Kazroua': generate_password_hash('cedric'),
+    'Mme Assemian': generate_password_hash('immo2026')
 }
 
 def format_date(value):
