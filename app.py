@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, Response, session
 import psycopg2
 import os
+import json
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage, HRFlowable
@@ -16,7 +17,6 @@ USERS = {
     'Kazroua': generate_password_hash('cedric'),
     'Madame Assemian': generate_password_hash('niman')
 }
-
 
 def format_date(value):
     try:
@@ -160,6 +160,30 @@ def supprimer(id):
     conn.close()
     return redirect('/')
 
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT * FROM loyers')
+    loyers = c.fetchall()
+    conn.close()
+    donnees_json = json.dumps([{
+        'mois': l[4][:7],
+        'montant': l[3],
+        'statut': l[5]
+    } for l in loyers])
+    total_encaisse = sum(l[3] for l in loyers if l[5] == 'Payé')
+    total_impayes = sum(l[3] for l in loyers if l[5] != 'Payé')
+    total = total_encaisse + total_impayes
+    taux = round((total_encaisse / total * 100) if total > 0 else 0)
+    return render_template('dashboard.html',
+                           donnees_json=donnees_json,
+                           total_encaisse=total_encaisse,
+                           total_impayes=total_impayes,
+                           taux=taux,
+                           user=session['user'])
+
 @app.route('/recu/<int:id>')
 @login_required
 def generer_recu(id):
@@ -168,29 +192,24 @@ def generer_recu(id):
     c.execute('SELECT * FROM loyers WHERE id = %s', (id,))
     loyer = c.fetchone()
     conn.close()
-
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
                             rightMargin=40, leftMargin=40,
                             topMargin=40, bottomMargin=40)
     styles = getSampleStyleSheet()
     elements = []
-
     logo_path = os.path.join('static', 'logo.png')
     if os.path.exists(logo_path):
         logo = RLImage(logo_path, width=150, height=75)
         elements.append(logo)
     elements.append(Spacer(1, 10))
-
     elements.append(Paragraph("REÇU DE PAIEMENT", styles['Title']))
     elements.append(Spacer(1, 5))
     elements.append(Paragraph(f"N° Reçu : LBR-{id:04d}", styles['Normal']))
     elements.append(Paragraph(f"Date d'émission : {datetime.now().strftime('%d/%m/%Y')}", styles['Normal']))
     elements.append(Spacer(1, 20))
-
     elements.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#1a3c6e')))
     elements.append(Spacer(1, 15))
-
     data = [
         ['Bien', loyer[1]],
         ['Locataire', loyer[2]],
@@ -198,7 +217,6 @@ def generer_recu(id):
         ['Date de paiement', format_date(loyer[4])],
         ['Statut', loyer[5]],
     ]
-
     table = Table(data, colWidths=[150, 300])
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#1a3c6e')),
@@ -212,10 +230,8 @@ def generer_recu(id):
     ]))
     elements.append(table)
     elements.append(Spacer(1, 30))
-
     elements.append(HRFlowable(width="100%", thickness=1, color=colors.grey))
     elements.append(Spacer(1, 20))
-
     sig_data = [['Signature du gestionnaire', "Cachet de l'entreprise"]]
     sig_table = Table(sig_data, colWidths=[230, 230])
     sig_table.setStyle(TableStyle([
@@ -226,14 +242,12 @@ def generer_recu(id):
     ]))
     elements.append(sig_table)
     elements.append(Spacer(1, 10))
-
     sig_path = os.path.join('static', 'signature.png')
     if os.path.exists(sig_path):
         sig_img = RLImage(sig_path, width=120, height=60)
         cachet_data = [[sig_img, 'Emplacement\ndu cachet']]
     else:
         cachet_data = [['', 'Emplacement\ndu cachet']]
-
     content_table = Table(cachet_data, colWidths=[230, 230])
     content_table.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -245,14 +259,12 @@ def generer_recu(id):
     ]))
     elements.append(content_table)
     elements.append(Spacer(1, 20))
-
     elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#1a3c6e')))
     elements.append(Spacer(1, 8))
     elements.append(Paragraph(
         "Le Labelle Résidence — Votre confort, notre engagement",
         styles['Normal']
     ))
-
     doc.build(elements)
     buffer.seek(0)
     filename = f"recu_LBR{id:04d}_{loyer[2].replace(' ', '_')}.pdf"
@@ -282,19 +294,16 @@ def export_pdf():
                      GROUP BY bien, locataire''', ('Impayé', 'En retard'))
     arrieres = c.fetchall()
     conn.close()
-
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
                             rightMargin=30, leftMargin=30,
                             topMargin=40, bottomMargin=30)
     styles = getSampleStyleSheet()
     elements = []
-
     logo_path = os.path.join('static', 'logo.png')
     if os.path.exists(logo_path):
         logo = RLImage(logo_path, width=120, height=60)
         elements.append(logo)
-
     titre = "Rapport de Gestion des Loyers"
     if mois:
         titre += f" — {mois}"
@@ -303,14 +312,12 @@ def export_pdf():
     elements.append(Spacer(1, 12))
     elements.append(Paragraph(f"Total encaissé : {total} FCFA", styles['Heading2']))
     elements.append(Spacer(1, 12))
-
     elements.append(Paragraph("Détail des loyers", styles['Heading2']))
     data = [['Bien', 'Locataire', 'Montant (FCFA)', 'Date', 'Statut', 'Commentaire']]
     for l in loyers:
         commentaire = l[6] if len(l) > 6 and l[6] else '-'
         date_formatee = format_date(l[4])
         data.append([l[1], l[2], f"{l[3]}", date_formatee, l[5], commentaire])
-
     table = Table(data, colWidths=[90, 100, 85, 70, 65, 90])
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a3c6e')),
@@ -323,14 +330,12 @@ def export_pdf():
     ]))
     elements.append(table)
     elements.append(Spacer(1, 20))
-
     if arrieres:
         elements.append(Paragraph("Arriérés de paiement", styles['Heading2']))
         data2 = [['Bien', 'Locataire', 'Total dû (FCFA)', 'Nb mois', 'Commentaire']]
         for a in arrieres:
             commentaire = a[4] if a[4] else '-'
             data2.append([a[0], a[1], f"{a[2]}", f"{a[3]}", commentaire])
-
         table2 = Table(data2, colWidths=[100, 120, 100, 70, 110])
         table2.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#c0392b')),
@@ -342,7 +347,6 @@ def export_pdf():
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.mistyrose, colors.white]),
         ]))
         elements.append(table2)
-
     doc.build(elements)
     buffer.seek(0)
     filename = f"loyers_{mois if mois else 'complet'}.pdf"
@@ -356,33 +360,6 @@ def manifest():
 
 with app.app_context():
     init_db()
-   @app.route('/dashboard')
-@login_required
-def dashboard():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM loyers')
-    loyers = c.fetchall()
-    conn.close()
-
-    import json
-    donnees_json = json.dumps([{
-        'mois': l[4][:7],
-        'montant': l[3],
-        'statut': l[5]
-    } for l in loyers])
-
-    total_encaisse = sum(l[3] for l in loyers if l[5] == 'Payé')
-    total_impayes = sum(l[3] for l in loyers if l[5] != 'Payé')
-    total = total_encaisse + total_impayes
-    taux = round((total_encaisse / total * 100) if total > 0 else 0)
-
-    return render_template('dashboard.html',
-                           donnees_json=donnees_json,
-                           total_encaisse=total_encaisse,
-                           total_impayes=total_impayes,
-                           taux=taux,
-                           user=session['user'])
 
 if __name__ == '__main__':
     app.run(debug=True)
