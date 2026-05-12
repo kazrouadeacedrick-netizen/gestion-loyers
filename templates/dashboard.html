@@ -3,10 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
+    <title>Tableau de bord</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="apple-touch-icon" href="/static/icon-192.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     <style>
         body { background: #f0f4f8; font-family: 'Segoe UI', sans-serif; }
@@ -17,8 +15,6 @@
             margin-bottom: 30px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
-        .navbar-custom h1 { color: white; font-size: 1.5rem; font-weight: bold; margin: 0; }
-        .navbar-custom .user-info { color: rgba(255,255,255,0.85); font-size: 0.9rem; }
         .card {
             border: none;
             border-radius: 15px;
@@ -39,6 +35,9 @@
             color: white;
             margin-bottom: 20px;
         }
+        .metric-card p { margin: 0; }
+        .metric-card .value { font-size: 1.5rem; font-weight: bold; }
+        .metric-card .label { font-size: 0.85rem; opacity: 0.85; }
         .logout-btn {
             background: rgba(255,255,255,0.2);
             color: white;
@@ -56,8 +55,7 @@
     <div class="navbar-custom d-flex justify-content-between align-items-center">
         <div>
             <img src="{{ url_for('static', filename='logo.png') }}" style="height:55px; margin-right:15px;">
-            <span class="navbar-custom h1">📊 Dashboard</span>
-            <div class="user-info">👤 Connecté : {{ user }}</div>
+            <span style="color:white; font-size:1.3rem; font-weight:bold;">Tableau de bord</span>
         </div>
         <div class="d-flex gap-2">
             <a href="/" class="logout-btn">🏠 Accueil</a>
@@ -67,69 +65,63 @@
 
     <div class="container">
 
-        <!-- Métriques -->
         <div class="row">
             <div class="col-md-4">
                 <div class="metric-card" style="background: linear-gradient(135deg, #27ae60, #2ecc71);">
-                    <div style="font-size: 1rem;">💰 Total encaissé</div>
-                    <div style="font-size: 1.8rem; font-weight: bold;">{{ total_encaisse | int }} FCFA</div>
+                    <p class="label">Total encaissé</p>
+                    <p class="value">{{ total_encaisse | int }} FCFA</p>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="metric-card" style="background: linear-gradient(135deg, #c0392b, #e74c3c);">
-                    <div style="font-size: 1rem;">❌ Total impayés</div>
-                    <div style="font-size: 1.8rem; font-weight: bold;">{{ total_impayes | int }} FCFA</div>
+                    <p class="label">Total impayés</p>
+                    <p class="value">{{ total_impayes | int }} FCFA</p>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="metric-card" style="background: linear-gradient(135deg, #1a3c6e, #2980b9);">
-                    <div style="font-size: 1rem;">📈 Taux de recouvrement</div>
-                    <div style="font-size: 1.8rem; font-weight: bold;">{{ taux }}%</div>
+                    <p class="label">Taux de recouvrement</p>
+                    <p class="value">{{ taux }}%</p>
                 </div>
             </div>
         </div>
 
-        <!-- Graphique -->
         <div class="card">
             <div class="card-header">📊 Revenus par mois</div>
             <div class="card-body">
-                <div style="position: relative; height: 350px;">
-                    <canvas id="revenueChart" role="img" aria-label="Graphique des revenus par mois">Revenus mensuels encaissés et impayés.</canvas>
-                </div>
+                <canvas id="revenueChart" style="height:350px;"></canvas>
             </div>
         </div>
 
     </div>
 
     <script>
-        const labels = {{ mois_labels | tojson }};
-        const encaisses = {{ mois_encaisses | tojson }};
-        const impayes = {{ mois_impayes | tojson }};
+        const mois = {{ mois_labels | tojson }};
+        const encaisses = {{ encaisses | tojson }};
+        const impayes = {{ impayes | tojson }};
 
         new Chart(document.getElementById('revenueChart'), {
             type: 'bar',
             data: {
-                labels: labels,
+                labels: mois,
                 datasets: [
                     {
                         label: 'Encaissé',
                         data: encaisses,
                         backgroundColor: '#1a3c6e',
-                        borderRadius: 6,
+                        borderRadius: 6
                     },
                     {
                         label: 'Impayés',
                         data: impayes,
                         backgroundColor: '#e74c3c',
-                        borderRadius: 6,
+                        borderRadius: 6
                     }
                 ]
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: true },
                     tooltip: {
                         callbacks: {
                             label: (ctx) => ctx.dataset.label + ' : ' + ctx.parsed.y.toLocaleString() + ' FCFA'
@@ -137,11 +129,8 @@
                     }
                 },
                 scales: {
-                    x: { grid: { display: false } },
                     y: {
-                        ticks: {
-                            callback: (v) => (v / 1000) + 'k FCFA'
-                        }
+                        ticks: { callback: (v) => (v/1000) + 'k' }
                     }
                 }
             }

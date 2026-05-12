@@ -165,30 +165,46 @@ def supprimer(id):
     conn.commit()
     conn.close()
     return redirect('/')
-
 @app.route('/dashboard')
 @login_required
 def dashboard():
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT CAST(date AS TEXT), CAST(montant AS FLOAT), CAST(statut AS TEXT) FROM loyers")
+    c.execute("SELECT date, montant, statut FROM loyers")
     rows = c.fetchall()
     conn.close()
 
-    donnees = [{'mois': r[0][:7], 'montant': r[1], 'statut': r[2]} for r in rows]
-    donnees_json = json.dumps(donnees)
+    mois_dict = {}
+    for r in rows:
+        mois = str(r[0])[:7]
+        montant = float(str(r[1]))
+        statut = str(r[2])
+        if mois not in mois_dict:
+            mois_dict[mois] = {'encaisse': 0, 'impayes': 0}
+        if statut == 'Payé':
+            mois_dict[mois]['encaisse'] += montant
+        else:
+            mois_dict[mois]['impayes'] += montant
 
-    total_encaisse = sum(r[1] for r in rows if r[2] == 'Payé')
-    total_impayes = sum(r[1] for r in rows if r[2] != 'Payé')
+    mois_labels = sorted(mois_dict.keys())
+    encaisses = [round(mois_dict[m]['encaisse']) for m in mois_labels]
+    impayes = [round(mois_dict[m]['impayes']) for m in mois_labels]
+
+    total_encaisse = sum(encaisses)
+    total_impayes = sum(impayes)
     total = total_encaisse + total_impayes
     taux = round((total_encaisse / total * 100) if total > 0 else 0)
 
     return render_template('dashboard.html',
-                           donnees_json=donnees_json,
+                           mois_labels=mois_labels,
+                           encaisses=encaisses,
+                           impayes=impayes,
                            total_encaisse=total_encaisse,
                            total_impayes=total_impayes,
                            taux=taux,
                            user=session['user'])
+
+
 
 @app.route('/recu/<int:id>')
 @login_required
