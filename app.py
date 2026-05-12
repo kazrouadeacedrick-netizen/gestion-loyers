@@ -356,6 +356,33 @@ def manifest():
 
 with app.app_context():
     init_db()
+   @app.route('/dashboard')
+@login_required
+def dashboard():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT * FROM loyers')
+    loyers = c.fetchall()
+    conn.close()
+
+    import json
+    donnees_json = json.dumps([{
+        'mois': l[4][:7],
+        'montant': l[3],
+        'statut': l[5]
+    } for l in loyers])
+
+    total_encaisse = sum(l[3] for l in loyers if l[5] == 'Payé')
+    total_impayes = sum(l[3] for l in loyers if l[5] != 'Payé')
+    total = total_encaisse + total_impayes
+    taux = round((total_encaisse / total * 100) if total > 0 else 0)
+
+    return render_template('dashboard.html',
+                           donnees_json=donnees_json,
+                           total_encaisse=total_encaisse,
+                           total_impayes=total_impayes,
+                           taux=taux,
+                           user=session['user'])
 
 if __name__ == '__main__':
     app.run(debug=True)
