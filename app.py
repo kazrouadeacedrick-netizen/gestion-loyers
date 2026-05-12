@@ -169,10 +169,10 @@ def dashboard():
     loyers = c.fetchall()
     conn.close()
     donnees_json = json.dumps([{
-        'mois': l[4][:7],
-        'montant': l[3],
-        'statut': l[5]
-    } for l in loyers])
+    'mois': str(l[4])[:7] if l[4] else '',
+    'montant': float(l[3]) if l[3] else 0,
+    'statut': str(l[5]) if l[5] else ''
+} for l in loyers])
     total_encaisse = sum(l[3] for l in loyers if l[5] == 'Payé')
     total_impayes = sum(l[3] for l in loyers if l[5] != 'Payé')
     total = total_encaisse + total_impayes
