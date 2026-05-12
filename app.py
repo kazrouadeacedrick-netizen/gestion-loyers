@@ -171,22 +171,15 @@ def supprimer(id):
 def dashboard():
     conn = get_db()
     c = conn.cursor()
-    c.execute('SELECT * FROM loyers')
-    loyers = c.fetchall()
+    c.execute("SELECT CAST(date AS TEXT), CAST(montant AS FLOAT), CAST(statut AS TEXT) FROM loyers")
+    rows = c.fetchall()
     conn.close()
 
-    donnees = []
-    for l in loyers:
-        donnees.append({
-            'mois': str(l[4])[:7] if l[4] else '',
-            'montant': float(str(l[3])) if l[3] else 0.0,
-            'statut': str(l[5]) if l[5] else ''
-        })
-
+    donnees = [{'mois': r[0][:7], 'montant': r[1], 'statut': r[2]} for r in rows]
     donnees_json = json.dumps(donnees)
 
-    total_encaisse = sum(float(str(l[3])) for l in loyers if str(l[5]) == 'Payé')
-    total_impayes = sum(float(str(l[3])) for l in loyers if str(l[5]) != 'Payé')
+    total_encaisse = sum(r[1] for r in rows if r[2] == 'Payé')
+    total_impayes = sum(r[1] for r in rows if r[2] != 'Payé')
     total = total_encaisse + total_impayes
     taux = round((total_encaisse / total * 100) if total > 0 else 0)
 
