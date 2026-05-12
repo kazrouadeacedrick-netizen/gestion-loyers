@@ -2,6 +2,12 @@ from flask import Flask, render_template, request, redirect, Response, session
 import psycopg2
 import os
 import json
+from decimal import Decimal
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage, HRFlowable
@@ -168,15 +174,18 @@ def dashboard():
     c.execute('SELECT * FROM loyers')
     loyers = c.fetchall()
     conn.close()
+
     donnees_json = json.dumps([{
-    'mois': str(l[4])[:7] if l[4] else '',
-    'montant': float(l[3]) if l[3] else 0,
-    'statut': str(l[5]) if l[5] else ''
-} for l in loyers])
+        'mois': str(l[4])[:7] if l[4] else '',
+        'montant': float(l[3]) if l[3] else 0,
+        'statut': str(l[5]) if l[5] else ''
+    } for l in loyers], cls=DecimalEncoder)
+
     total_encaisse = sum(l[3] for l in loyers if l[5] == 'Payé')
     total_impayes = sum(l[3] for l in loyers if l[5] != 'Payé')
     total = total_encaisse + total_impayes
     taux = round((total_encaisse / total * 100) if total > 0 else 0)
+
     return render_template('dashboard.html',
                            donnees_json=donnees_json,
                            total_encaisse=total_encaisse,
