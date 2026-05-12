@@ -14,7 +14,7 @@ app.secret_key = 'gestion_loyers_secret_2026'
 
 USERS = {
     'Kazroua': generate_password_hash('cedric'),
-    'Mme Assemian': generate_password_hash('niman')
+    'Madame Assemian': generate_password_hash('niman')
 }
 
 
