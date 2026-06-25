@@ -38,7 +38,10 @@ def get_db():
     url = os.environ.get('DATABASE_URL', '')
     if url.startswith('postgres://'):
         url = url.replace('postgres://', 'postgresql://', 1)
-    conn = psycopg2.connect(url, sslmode='require')
+    try:
+        conn = psycopg2.connect(url, sslmode='require')
+    except:
+        conn = psycopg2.connect(url)
     return conn
 
 def init_db():

@@ -1,0 +1,7 @@
+gestion_loyers/
+│
+├── app.py          ← le cerveau de l'app
+├── database.db     ← la base de données
+└── templates/
+    └── index.html  ← l'interface visuelle
+    
